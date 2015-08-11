@@ -38,9 +38,8 @@ def test():
         copy everything to test machine from local machine,
         pull everything from repository to test server.
     """
-    env_name = 'test'
-    set_env(env_name)
-    push(env_name)
+    env_name = 'deploy'
+    backup(env_name)
     # pull('test')
 
 
@@ -64,39 +63,31 @@ def rollback(env_name):
     """
         rollback to last check point.
     """
-    assert 'workspace' in ENVS[env_name], "workspace does not exist."
-    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
-    command_str = 'git checkout .'
-    if env_name == 'local':
-        with lcd(ENVS[env_name]['workspace']):
-            local(command_str)
-    else:
-        with cd(ENVS[env_name]['workspace']):
-            run(command_str)
-
-
-def pull(env_name):
-    """
-        pull everything from repository.
-    """
-    assert 'workspace' in ENVS[env_name], "workspace does not exist."
-    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
-    command_str = 'git pull origin %s' % ENVS[env_name]['git_branch']
-    if env_name == 'local':
-        with lcd(ENVS[env_name]['workspace']):
-            local(command_str)
-    else:
-        with cd(ENVS[env_name]['workspace']):
-            run(command_str)
-
-
-def push(env_name):
-    """
-        push everything to repository.
-    """
+    set_env(env_name)
     assert 'workspace' in ENVS[env_name], "workspace does not exist."
     assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
     commands = []
+    commands.append('git checkout .')
+    commands.append('wp db import dump.sql')
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                local(cmd)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                run(cmd)
+
+
+def backup(env_name):
+    """
+        push everything to repository.
+    """
+    set_env(env_name)
+    assert 'workspace' in ENVS[env_name], "workspace does not exist."
+    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    commands = []
+    commands.append('wp db export dump.sql')
     commands.append('git add -A')
     commands.append('git commit -m "backup at %s"' % get_current_datetime())
     commands.append('git push origin %s' % ENVS[env_name]['git_branch'])
@@ -107,7 +98,7 @@ def push(env_name):
     else:
         with cd(ENVS[env_name]['workspace']):
             for cmd in commands:
-                local(cmd)
+                run(cmd)
 
 
 def update():
