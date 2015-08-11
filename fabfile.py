@@ -2,6 +2,7 @@ from fabric.api import *
 import json
 import sys
 import os
+import datetime
 
 
 current_path = os.path.dirname(os.path.realpath(__file__))
@@ -37,9 +38,10 @@ def test():
         copy everything to test machine from local machine,
         pull everything from repository to test server.
     """
-    set_env('test')
-    update()
-    #pull('test')
+    env_name = 'test'
+    set_env(env_name)
+    push(env_name)
+    # pull('test')
 
 
 def deploy():
@@ -94,13 +96,18 @@ def push(env_name):
     """
     assert 'workspace' in ENVS[env_name], "workspace does not exist."
     assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
-    command_str = 'git push origin %s' % ENVS[env_name]['git_branch']
+    commands = []
+    commands.append('git add -A')
+    commands.append('git commit -m "backup at %s"' % get_current_datetime())
+    commands.append('git push origin %s' % ENVS[env_name]['git_branch'])
     if env_name == 'local':
         with lcd(ENVS[env_name]['workspace']):
-            local(command_str)
+            for cmd in commands:
+                local(cmd)
     else:
         with cd(ENVS[env_name]['workspace']):
-            run(command_str)
+            for cmd in commands:
+                local(cmd)
 
 
 def update():
@@ -110,3 +117,7 @@ def update():
     """
     sudo("aptitude    update")
     sudo("aptitude -y upgrade")
+
+
+def get_current_datetime():
+    return datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
