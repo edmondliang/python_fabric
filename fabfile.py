@@ -12,18 +12,23 @@ if os.path.isfile(setting_file):
 else:
     print """
             Setting file does not exist!
-            Please configure one according readme.me then to continue!
+            Please create setting.json according readme.me then to continue!
         """
     sys.exit(0)
 
 
-def _set_env(env_name):
+def set_env(env_name):
     """
         Set enviroment
     """
+
     assert env_name in ENVS, "Environment does not exist."
-    for k, v in ENVS[env_name]["env"].iteritems():
-        setattr(env, k, v)
+    # for k, v in ENVS[env_name]["env"].iteritems():
+    #     setattr(env, k, v)
+    env.host = ENVS[env_name]["env"]["host"]
+    env.host_string = ENVS[env_name]["env"]["host"]
+    env.user = ENVS[env_name]["env"]["user"]
+    env.password = ENVS[env_name]["env"]["password"]
 
 
 def test():
@@ -32,7 +37,9 @@ def test():
         copy everything to test machine from local machine,
         pull everything from repository to test server.
     """
-    pass
+    set_env('test')
+    update()
+    #pull('test')
 
 
 def deploy():
@@ -51,25 +58,49 @@ def copy():
     pass
 
 
-def rollback():
+def rollback(env_name):
     """
         rollback to last check point.
     """
-    pass
+    assert 'workspace' in ENVS[env_name], "workspace does not exist."
+    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    command_str = 'git checkout .'
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            local(command_str)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            run(command_str)
 
 
-def pull():
+def pull(env_name):
     """
         pull everything from repository.
     """
-    pass
+    assert 'workspace' in ENVS[env_name], "workspace does not exist."
+    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    command_str = 'git pull origin %s' % ENVS[env_name]['git_branch']
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            local(command_str)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            run(command_str)
 
 
-def push():
+def push(env_name):
     """
         push everything to repository.
     """
-    pass
+    assert 'workspace' in ENVS[env_name], "workspace does not exist."
+    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    command_str = 'git push origin %s' % ENVS[env_name]['git_branch']
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            local(command_str)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            run(command_str)
 
 
 def update():
@@ -77,5 +108,5 @@ def update():
         Update the default OS installation's
         basic default tools.
     """
-    run("aptitude    update")
-    run("aptitude -y upgrade")
+    sudo("aptitude    update")
+    sudo("aptitude -y upgrade")
