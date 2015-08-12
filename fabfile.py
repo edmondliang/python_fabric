@@ -40,15 +40,9 @@ def test():
         copy everything to test machine from local machine,
         pull everything from repository to test server.
     """
-    # push('test')
-    # sync_temp('deploy', 'test')
-    # backup('test')
-    # rollback('test')
-    # sync_temp('deploy', 'test')
-    # sync_from_temp('deploy')
-    # pull('test')
     dest_env = 'test'
     source_env = 'local'
+    backup(source_env)
     backup(dest_env)
     sync_temp(dest_env, source_env)
     sync_from_temp(dest_env)
@@ -59,12 +53,15 @@ def deploy():
         push everything into repository from production machine,
         copy everything to production machine from test machine,
         pull everything from repository to production machine.
+        import database.
     """
-    dest_env = 'test'
-    source_env = 'deploy'
+    dest_env = 'deploy'
+    source_env = 'test'
+    backup(source_env)
     backup(dest_env)
     sync_temp(dest_env, source_env)
     sync_from_temp(dest_env)
+    db_import(dest_env)
 
 
 def sync_temp(env_name, from_branch):
@@ -112,7 +109,7 @@ def sync_from_temp(env_name):
     destin_path = os.path.join(
         ENVS[env_name]['workspace'], ENVS[env_name]['sync_dir'])+'/'
     commands = []
-    commands.append('rsync -vzrtopgu --delete %s %s' %
+    commands.append('rsync -avzrtW --delete %s %s' %
                     (source_path, destin_path))
     if env_name == 'local':
         for cmd in commands:
@@ -120,7 +117,6 @@ def sync_from_temp(env_name):
     else:
         for cmd in commands:
             run(cmd)
-    db_import(env_name)
 
 
 def db_import(env_name):
@@ -171,8 +167,7 @@ def pull(env_name):
     commands = []
 
     commands.append('git checkout %s' % ENVS[env_name]['git_branch'])
-    commands.append('git reset --hard origin/%s' %
-                    ENVS[env_name]['git_branch'])
+    commands.append('git reset --hard HEAD')
     commands.append('git clean -dfx')
     commands.append('git pull origin %s' % ENVS[env_name]['git_branch'])
     if env_name == 'local':
