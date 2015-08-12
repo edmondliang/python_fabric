@@ -1,4 +1,6 @@
 from fabric.api import *
+from fabric.contrib.project import rsync_project
+from fabric.contrib.files import exists as path_exists
 import json
 import sys
 import os
@@ -38,9 +40,18 @@ def test():
         copy everything to test machine from local machine,
         pull everything from repository to test server.
     """
-    env_name = 'deploy'
-    backup(env_name)
+    # push('test')
+    # sync_temp('deploy', 'test')
+    # backup('test')
+    # rollback('test')
+    # sync_temp('deploy', 'test')
+    # sync_from_temp('deploy')
     # pull('test')
+    dest_env = 'test'
+    source_env = 'local'
+    backup(dest_env)
+    sync_temp(dest_env, source_env)
+    sync_from_temp(dest_env)
 
 
 def deploy():
@@ -49,26 +60,143 @@ def deploy():
         copy everything to production machine from test machine,
         pull everything from repository to production machine.
     """
-    pass
+    dest_env = 'test'
+    source_env = 'deploy'
+    backup(dest_env)
+    sync_temp(dest_env, source_env)
+    sync_from_temp(dest_env)
 
 
-def copy():
+def sync_temp(env_name, from_branch):
     """
-        copy everything from a machine to b machine.
+        synchronize from given repository.
     """
-    pass
+    assert 'tempspace' in ENVS[env_name], "tempspace does not exist."
+    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    set_env(env_name)
+    cmd_mkdir = "mkdir -p %s" % ENVS[env_name]['tempspace']
+    cmd_clone = "git clone %s . -b %s" % (ENVS['project'][
+        'repository'], from_branch)
+    commands = []
+    commands.append('git checkout %s' % from_branch)
+    commands.append('git reset --hard HEAD')
+    commands.append('git clean -dfx')
+    commands.append('git pull origin %s' % from_branch)
+    if env_name == 'local':
+        if not os.direxists(ENVS[env_name]['tempspace']):
+            local(cmd_mkdir)
+            with lcd(ENVS[env_name]['tempspace']):
+                local(cmd_clone)
+        with lcd(ENVS[env_name]['tempspace']):
+            for cmd in commands:
+                local(cmd)
+    else:
+        if not path_exists(ENVS[env_name]['tempspace']):
+            run(cmd_mkdir)
+            with cd(ENVS[env_name]['tempspace']):
+                run(cmd_clone)
+        with cd(ENVS[env_name]['tempspace']):
+            for cmd in commands:
+                run(cmd)
 
 
-def rollback(env_name):
+def sync_from_temp(env_name):
     """
-        rollback to last check point.
+        synchronize to server from tempory directory.
+    """
+    assert 'tempspace' in ENVS[env_name], "tempspace does not exist."
+    assert 'workspace' in ENVS[env_name], "workspace does not exist."
+    set_env(env_name)
+    source_path = os.path.join(
+        ENVS[env_name]['tempspace'], ENVS[env_name]['sync_dir'])+'/'
+    destin_path = os.path.join(
+        ENVS[env_name]['workspace'], ENVS[env_name]['sync_dir'])+'/'
+    commands = []
+    commands.append('rsync -vzrtopgu --delete %s %s' %
+                    (source_path, destin_path))
+    if env_name == 'local':
+        for cmd in commands:
+            local(cmd)
+    else:
+        for cmd in commands:
+            run(cmd)
+    db_import(env_name)
+
+
+def db_import(env_name):
+    """
+        database import from file
+    """
+    set_env(env_name)
+    commands = []
+    commands.append('wp db import %s' % ENVS[env_name]['dump_file'])
+    for pattern in ENVS[env_name]['replace_pattern']:
+        commands.append('wp search-replace %s %s' %
+                        (pattern, ENVS[env_name]['replace']))
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                local(cmd)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                run(cmd)
+
+
+def db_export(env_name):
+    """
+        database export to file
+    """
+    set_env(env_name)
+    commands = []
+    commands.append('wp db export %s' % ENVS[env_name]['dump_file'])
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                local(cmd)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                run(cmd)
+
+
+def pull(env_name):
+    """
+        pull from last check point.
     """
     set_env(env_name)
     assert 'workspace' in ENVS[env_name], "workspace does not exist."
     assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    assert 'dump_file' in ENVS[env_name], "dump_file does not exist."
     commands = []
-    commands.append('git checkout .')
-    commands.append('wp db import dump.sql')
+
+    commands.append('git checkout %s' % ENVS[env_name]['git_branch'])
+    commands.append('git reset --hard origin/%s' %
+                    ENVS[env_name]['git_branch'])
+    commands.append('git clean -dfx')
+    commands.append('git pull origin %s' % ENVS[env_name]['git_branch'])
+    if env_name == 'local':
+        with lcd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                local(cmd)
+    else:
+        with cd(ENVS[env_name]['workspace']):
+            for cmd in commands:
+                run(cmd)
+
+
+def push(env_name):
+    """
+        push everything to repository.
+    """
+    set_env(env_name)
+    assert 'workspace' in ENVS[env_name], "workspace does not exist."
+    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
+    assert 'dump_file' in ENVS[env_name], "dump_file does not exist."
+    commands = []
+    commands.append('git add -A')
+    commands.append('git commit -m "backup at %s"' % get_current_datetime())
+    commands.append('git push origin %s' % ENVS[env_name]['git_branch'])
     if env_name == 'local':
         with lcd(ENVS[env_name]['workspace']):
             for cmd in commands:
@@ -81,24 +209,18 @@ def rollback(env_name):
 
 def backup(env_name):
     """
-        push everything to repository.
+        backup everything to repository.
     """
-    set_env(env_name)
-    assert 'workspace' in ENVS[env_name], "workspace does not exist."
-    assert 'git_branch' in ENVS[env_name], "git_branch does not exist."
-    commands = []
-    commands.append('wp db export dump.sql')
-    commands.append('git add -A')
-    commands.append('git commit -m "backup at %s"' % get_current_datetime())
-    commands.append('git push origin %s' % ENVS[env_name]['git_branch'])
-    if env_name == 'local':
-        with lcd(ENVS[env_name]['workspace']):
-            for cmd in commands:
-                local(cmd)
-    else:
-        with cd(ENVS[env_name]['workspace']):
-            for cmd in commands:
-                run(cmd)
+    db_export(env_name)
+    push(env_name)
+
+
+def rollback(env_name):
+    """
+        rollback to last check point.
+    """
+    pull(env_name)
+    db_import(env_name)
 
 
 def update():
