@@ -64,6 +64,13 @@ def deploy():
     db_import(dest_env)
 
 
+def get_files(env_name):
+    localpath = os.path.join(ENVS['local']['workspace'])
+    remotepath = os.path.join(ENVS[env_name]['workspace'],'wp-content')
+    set_env(env_name)
+    get(remotepath,localpath)
+
+
 def sync_temp(env_name, from_branch):
     """
         synchronize from given repository.
@@ -108,9 +115,13 @@ def sync_from_temp(env_name):
         ENVS[env_name]['tempspace'], ENVS[env_name]['sync_dir'])+'/'
     destin_path = os.path.join(
         ENVS[env_name]['workspace'], ENVS[env_name]['sync_dir'])+'/'
+    cache_path = os.path.join(
+        ENVS[env_name]['workspace'], ENVS[env_name]['sync_dir'],'cache')
     commands = []
-    commands.append('rsync -avzrtW --delete %s %s' %
+    commands.append('rsync -avzrtW --delete --exclude "cache" %s %s' %
                     (source_path, destin_path))
+    commands.append('chmod 777 %s -R' % cache_path)
+
     if env_name == 'local':
         for cmd in commands:
             local(cmd)
